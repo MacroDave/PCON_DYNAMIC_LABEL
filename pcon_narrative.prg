@@ -12,14 +12,15 @@ close @all
 logmode l
 !count=150 '150 was until Mar-22. Change for subsquent quarters
 !critval=0.2
-!growth=0 'growth regression or log level regressions
+!growth=0 '(=1 growth regression or =0 log level regressions)
+!trend=0 '(=1 include a linear trend =0 not linear trend)
 
 '********************************************************************************
 'LOAD DATA FROM NATACCS
 '********************************************************************************
 
 wfcreate(wf=pcon_narrative,page=pcon_narrative) q 1959q3 2022q1
-import "5206008_Household_Final_Consumption_Expenditure.xlsx" range=Data1 colhead=10 namepos=last na="#N/A" @id @date(series_id) @destid @date @smpl @all
+import "\\romulus\ECD_PRO$\DATA\NATACCS\5206008_Household_Final_Consumption_Expenditure.xlsx" range=Data1 colhead=10 namepos=last na="#N/A" @id @date(series_id) @destid @date @smpl @all
 
 %qvars = "A2303246R A2303248V	A2303250F	A2303252K	A2303254R	A2303256V	A2303258X	A2303260K	A2303262R	A2303264V	A2303266X	A2303268C	A2303270R	A2303272V	A2303274X	A2303276C	A2303278J "
 
@@ -73,12 +74,6 @@ smpl @all
 series pcon = A2302236T/A2303280V
 
 '************************************************************************************************
-'SAVE IMPORTED DATA WORKFILE
-'************************************************************************************************
-'Save Workfile After Importing Data
-wfsave pcon_narrative.wf1
-
-'************************************************************************************************
 'ROLLING REGRESSIONS
 '************************************************************************************************
 
@@ -93,6 +88,10 @@ else
 	%depvar="log"
 endif
 
+if !trend = 1 then
+	%trend="+ @trend"
+endif
+
 for %var {%varnames}
 	
 	smpl @all
@@ -105,13 +104,13 @@ for %var {%varnames}
 	for !i=0 to !count
 
 		smpl 1974q3+!i 1974q3+!i+39
-		equation _p_{%var}.ls {%depvar}(p_{%var}) c {%depvar}(p_{%var}(-1)) {%depvar}(p_{%var}(-2)) {%depvar}(p_{%var}(-3)) {%depvar}(p_{%var}(-4)) @trend
+		equation _p_{%var}.ls {%depvar}(p_{%var}) c {%depvar}(p_{%var}(-1)) {%depvar}(p_{%var}(-2)) {%depvar}(p_{%var}(-3)) {%depvar}(p_{%var}(-4)) {%depvar}(q_{%var}(-1)) {%depvar}(q_{%var}(-2)) {%depvar}(q_{%var}(-3)) {%depvar}(q_{%var}(-4)) {%trend}
 		smpl 1974q3+!i+40 1974q3+!i+40
 		_p_{%var}.fit(d) p_{%var}f
 		res_p_{%var} = {%depvar}(p_{%var})-p_{%var}f
 		
 		smpl 1974q3+!i 1974q3+!i+39
-		equation _q_{%var}.ls {%depvar}(q_{%var}) c {%depvar}(q_{%var}(-1)) {%depvar}(q_{%var}(-2)) {%depvar}(q_{%var}(-3)) {%depvar}(q_{%var}(-4)) @trend
+		equation _q_{%var}.ls {%depvar}(q_{%var}) c  {%depvar}(p_{%var}(-1)) {%depvar}(p_{%var}(-2)) {%depvar}(p_{%var}(-3)) {%depvar}(p_{%var}(-4)) {%depvar}(q_{%var}(-1)) {%depvar}(q_{%var}(-2)) {%depvar}(q_{%var}(-3)) {%depvar}(q_{%var}(-4)) {%trend}
 		smpl 1974q3+!i+40 1974q3+!i+40
 		_q_{%var}.fit(d) q_{%var}f
 		res_q_{%var} = {%depvar}(q_{%var})-q_{%var}f
@@ -178,16 +177,17 @@ mtos(v_ambig,ambig)
 
 smpl 2010q1 @last
 group g_chart @movsum(demand,4) @movsum(ambig,4) @movsum(supply,4) @pcy(pcon)
+delete(noerr) gr_chart
 freeze(gr_chart) g_chart.mixed(llast) stackedbar(1,2,3) line(4)
 gr_chart.name(1) Demand
 gr_chart.name(2) Ambiguous
 gr_chart.name(3) Supply
-gr_chart.name(4) PCON Year-on-Year Growth
-gr_chart.setelem(1) fillcolor(@rgb(130,220,120))
-gr_chart.setelem(2) fillcolor(@rgb(255,128,0))
-gr_chart.setelem(3) fillcolor(@rgb(0,128,255))
-gr_chart.setelem(4) linecolor(@rgb(0,0,64))
+gr_chart.name(4) 
+gr_chart.setelem(1) fillcolor(@rgb(0,44,71))
+gr_chart.setelem(2) fillcolor(@rgb(230,30,38))
+gr_chart.setelem(3) fillcolor(@rgb(58,111,175))
+gr_chart.setelem(1) linecolor(@rgb(0,0,0))
+gr_chart.legend(2,0.1)
 
 show gr_chart
-
 
