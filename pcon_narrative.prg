@@ -11,9 +11,10 @@ cd %path
 close @all
 logmode l
 !count=150 '150 was until Mar-22. Change for subsquent quarters
-!critval=0.2
+!lags=0 '(=1 include lags of variables =0 no lags)
 !growth=0 '(=1 growth regression or =0 log level regressions)
-!trend=0 '(=1 include a linear trend =0 not linear trend)
+!trend=1 '(=1 include a linear trend =0 not linear trend)
+!qdums=1 '(=1 includes quarterly dummies =0 no dummies)
 
 '********************************************************************************
 'LOAD DATA FROM NATACCS
@@ -73,6 +74,11 @@ next
 smpl @all
 series pcon = A2302236T/A2303280V
 
+'Quarterly Dummies
+Series dumq2=@quarter=2
+Series dumq3=@quarter=3
+Series dumq4=@quarter=4
+
 '************************************************************************************************
 'ROLLING REGRESSIONS
 '************************************************************************************************
@@ -89,7 +95,11 @@ else
 endif
 
 if !trend = 1 then
-	%trend="+ @trend"
+	%trend=" @trend"
+endif
+
+if !qdums=1 then
+	%qdums=" dumq2 dumq3 dumq4"
 endif
 
 for %var {%varnames}
@@ -101,16 +111,20 @@ for %var {%varnames}
 	series sp_{%var} = NA
 	series am_{%var} = NA
 
+	if !lags=1 then
+		%lags = %depvar+"(p_"+%var+"(-1)) "+%depvar+"(p_"+%var+"(-2)) "+%depvar+"(p_"+%var+"(-3)) "+%depvar+"(p_"+%var+"(-4)) "+%depvar+"(q_"+%var+"(-1)) "+%depvar+"(q_"+%var+"(-2)) "+%depvar+"(q_"+%var+"(-3)) "+%depvar+"(q_"+%var+"(-4))"
+	endif
+
 	for !i=0 to !count
 
 		smpl 1974q3+!i 1974q3+!i+39
-		equation _p_{%var}.ls {%depvar}(p_{%var}) c {%depvar}(p_{%var}(-1)) {%depvar}(p_{%var}(-2)) {%depvar}(p_{%var}(-3)) {%depvar}(p_{%var}(-4)) {%depvar}(q_{%var}(-1)) {%depvar}(q_{%var}(-2)) {%depvar}(q_{%var}(-3)) {%depvar}(q_{%var}(-4)) {%trend}
+		equation _p_{%var}.ls {%depvar}(p_{%var}) c {%lags} {%trend} {%qdums}
 		smpl 1974q3+!i+40 1974q3+!i+40
 		_p_{%var}.fit(d) p_{%var}f
 		res_p_{%var} = {%depvar}(p_{%var})-p_{%var}f
 		
 		smpl 1974q3+!i 1974q3+!i+39
-		equation _q_{%var}.ls {%depvar}(q_{%var}) c  {%depvar}(p_{%var}(-1)) {%depvar}(p_{%var}(-2)) {%depvar}(p_{%var}(-3)) {%depvar}(p_{%var}(-4)) {%depvar}(q_{%var}(-1)) {%depvar}(q_{%var}(-2)) {%depvar}(q_{%var}(-3)) {%depvar}(q_{%var}(-4)) {%trend}
+		equation _q_{%var}.ls {%depvar}(q_{%var}) c  {%lags} {%trend} {%qdums}
 		smpl 1974q3+!i+40 1974q3+!i+40
 		_q_{%var}.fit(d) q_{%var}f
 		res_q_{%var} = {%depvar}(q_{%var})-q_{%var}f
@@ -121,14 +135,14 @@ for %var {%varnames}
 
 	'Supply Coding
 	sp_{%var} = @recode( (res_p_{%var}>0 and res_q_{%var}<0) or (res_p_{%var}<0 and res_q_{%var}>0),1,sp_{%var})
-	sp_{%var} = @recode((res_p_{%var}/(@stdev(res_p_{%var},ssest)))<(!critval) and (res_p_{%var}/(@stdev(res_p_{%var},ssest)))>-(!critval),0,sp_{%var})
-	sp_{%var} = @recode((res_q_{%var}/(@stdev(res_q_{%var},ssest)))<(!critval) and (res_q_{%var}/(@stdev(res_q_{%var},ssest)))>-(!critval),0,sp_{%var})
+	sp_{%var} = @recode(res_p_{%var}>@quantile(res_p_{%var},0.4) and res_p_{%var}<=@quantile(res_p_{%var},0.6),0,sp_{%var})
+	sp_{%var} = @recode(res_q_{%var}>@quantile(res_q_{%var},0.4) and res_q_{%var}<=@quantile(res_q_{%var},0.6),0,sp_{%var})
 	sp_{%var} = @recode(sp_{%var}=NA,0,sp_{%var})
 
 	'Demand Coding
 	dm_{%var} = @recode( (res_p_{%var}>0 and res_q_{%var}>0) or (res_p_{%var}<0 and res_q_{%var}<0),1,dm_{%var})
-	dm_{%var} = @recode((res_p_{%var}/(@stdev(res_p_{%var},ssest)))<(!critval) and (res_p_{%var}/(@stdev(res_p_{%var},ssest)))>-(!critval),0,dm_{%var})
-	dm_{%var} = @recode((res_q_{%var}/(@stdev(res_q_{%var},ssest)))<(!critval) and (res_q_{%var}/(@stdev(res_q_{%var},ssest)))>-(!critval),0,dm_{%var})
+	dm_{%var} = @recode(res_p_{%var}>@quantile(res_p_{%var},0.4) and res_p_{%var}<=@quantile(res_p_{%var},0.6),0,dm_{%var})
+	dm_{%var} = @recode(res_q_{%var}>@quantile(res_q_{%var},0.4) and res_q_{%var}<=@quantile(res_q_{%var},0.6),0,dm_{%var})
 	dm_{%var} = @recode(dm_{%var}=NA,0,dm_{%var})
 
 	'Ambiguous Coding (=0)
